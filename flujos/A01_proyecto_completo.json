@@ -1,0 +1,996 @@
+[
+  {
+    "id": "31e607b434bce90b",
+    "type": "tab",
+    "label": "A01 - Motor Físico y MQTT",
+    "disabled": false,
+    "info": "Motor matemático basado puramente en JSONata para cumplir rúbrica."
+  },
+  {
+    "id": "9489d1aa62b36d8f",
+    "type": "tab",
+    "label": "A01 - Dashboard Web",
+    "disabled": false,
+    "info": "Servidor HTTP para la interfaz propia en HTML/JS."
+  },
+  {
+    "id": "a01v2_tab",
+    "type": "tab",
+    "label": "A01 V2 - Dashboard FUNCIONAL",
+    "disabled": false,
+    "info": "Importar este único flujo, Instanciar y abrir http://127.0.0.1:1880/a01-v2. Usa el contexto global del motor A01 original sin alterar MQTT."
+  },
+  {
+    "id": "mqtt_broker_local",
+    "type": "mqtt-broker",
+    "name": "Localhost MQTT",
+    "broker": "localhost",
+    "port": "1883",
+    "clientid": "simulador_a01",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "birthTopic": "utm/iot/A01/status",
+    "birthQos": "1",
+    "birthRetain": true,
+    "birthPayload": "{\"status\":\"offline\"}",
+    "closeTopic": "utm/iot/A01/status",
+    "closeQos": "1",
+    "closeRetain": true,
+    "closePayload": "{\"status\":\"offline\"}",
+    "willTopic": "utm/iot/A01/status",
+    "willQos": "1",
+    "willRetain": true,
+    "willPayload": "{\"status\":\"offline\"}"
+  },
+  {
+    "id": "c428593f92c3c1e5",
+    "type": "inject",
+    "z": "31e607b434bce90b",
+    "name": "Arranque (Una vez)",
+    "props": [],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 0.1,
+    "topic": "",
+    "x": 360,
+    "y": 240,
+    "wires": [
+      [
+        "52ef8c4c3bf44680"
+      ]
+    ]
+  },
+  {
+    "id": "52ef8c4c3bf44680",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Establecer Memoria Base",
+    "rules": [
+      {
+        "t": "set",
+        "p": "state",
+        "pt": "global",
+        "to": "stopped",
+        "tot": "str"
+      },
+      {
+        "t": "set",
+        "p": "speed",
+        "pt": "global",
+        "to": "0",
+        "tot": "num"
+      },
+      {
+        "t": "set",
+        "p": "target_speed",
+        "pt": "global",
+        "to": "0",
+        "tot": "num"
+      },
+      {
+        "t": "set",
+        "p": "current",
+        "pt": "global",
+        "to": "0",
+        "tot": "num"
+      },
+      {
+        "t": "set",
+        "p": "temperature",
+        "pt": "global",
+        "to": "25",
+        "tot": "num"
+      },
+      {
+        "t": "set",
+        "p": "products",
+        "pt": "global",
+        "to": "0",
+        "tot": "num"
+      },
+      {
+        "t": "set",
+        "p": "sensor_fail",
+        "pt": "global",
+        "to": "false",
+        "tot": "bool"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 580,
+    "y": 240,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "e9d2064186e80367",
+    "type": "inject",
+    "z": "31e607b434bce90b",
+    "name": "Reloj Físico 1s",
+    "props": [],
+    "repeat": "1",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "x": 350,
+    "y": 320,
+    "wires": [
+      [
+        "03f1fdfcd76f9a80"
+      ]
+    ]
+  },
+  {
+    "id": "03f1fdfcd76f9a80",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Ecuaciones Físicas (JSONata)",
+    "rules": [
+      {
+        "t": "set",
+        "p": "speed",
+        "pt": "global",
+        "to": "(\t    $s := $globalContext(\"speed\");\t    $t := $globalContext(\"target_speed\");\t    $st := $globalContext(\"state\");\t    $st = \"jammed\" ? 0 :\t    $st = \"running\" ? (\t        $s < $t ? $min([$s + 0.2, $t]) :\t        $s > $t ? $max([$s - 0.2, $t]) : $s\t    ) : $max([$s - 0.2, 0])\t)",
+        "tot": "jsonata"
+      },
+      {
+        "t": "set",
+        "p": "current",
+        "pt": "global",
+        "to": "(\t    $s := $globalContext(\"speed\");\t    $st := $globalContext(\"state\");\t    $base := ($st = \"running\" or $s > 0) ? 2.0 : 0.0;\t    $carga := $s >= 1.0 ? 11.0 : $s * 3.5;\t    $atasco := ($st = \"jammed\") ? 15.0 : 0.0;\t    $base + $carga + $atasco\t)",
+        "tot": "jsonata"
+      },
+      {
+        "t": "set",
+        "p": "temperature",
+        "pt": "global",
+        "to": "(\t    $t := $globalContext(\"temperature\");\t    $i := $globalContext(\"current\");\t    $calentamiento := $i > 5.0 ? ($i - 5.0) * 0.5 : 0;\t    $disipacion := 0.1 * ($t - 25.0);\t    $max([$t + $calentamiento - $disipacion, 25.0])\t)",
+        "tot": "jsonata"
+      },
+      {
+        "t": "set",
+        "p": "products",
+        "pt": "global",
+        "to": "(\t    $p := $globalContext(\"products\");\t    $s := $globalContext(\"speed\");\t    $st := $globalContext(\"state\");\t    $fail := $globalContext(\"sensor_fail\");\t    $st = \"jammed\" or $fail = true ? $p : $p + ($s / 2.0)\t)",
+        "tot": "jsonata"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 580,
+    "y": 320,
+    "wires": [
+      [
+        "0de75ee79ca1a1bf",
+        "c73f520ae48dbbef",
+        "554591afb7750baf"
+      ]
+    ]
+  },
+  {
+    "id": "0de75ee79ca1a1bf",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Construir Telemetría",
+    "rules": [
+      {
+        "t": "set",
+        "p": "payload",
+        "pt": "msg",
+        "to": "{\t   \"velocidad\": $round($globalContext(\"speed\"), 2),\t   \"corriente\": $round($globalContext(\"current\"), 2),\t   \"temperatura\": $round($globalContext(\"temperature\"), 2),\t   \"productos\": $floor($globalContext(\"products\")),\t   \"timestamp\": $now()\t}",
+        "tot": "jsonata"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 850,
+    "y": 280,
+    "wires": [
+      [
+        "6ec3d8df5d1178c7",
+        "2a3837f5f556d0b9"
+      ]
+    ]
+  },
+  {
+    "id": "c73f520ae48dbbef",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Construir Estado",
+    "rules": [
+      {
+        "t": "set",
+        "p": "payload",
+        "pt": "msg",
+        "to": "{\t   \"status\": $globalContext(\"state\"),\t   \"timestamp\": $now()\t}",
+        "tot": "jsonata"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 840,
+    "y": 320,
+    "wires": [
+      [
+        "3d2ba4426ea68f41"
+      ]
+    ]
+  },
+  {
+    "id": "554591afb7750baf",
+    "type": "switch",
+    "z": "31e607b434bce90b",
+    "name": "Detectar Alarmas",
+    "property": "true",
+    "propertyType": "jsonata",
+    "rules": [
+      {
+        "t": "eq",
+        "v": "$globalContext(\"state\") = \"jammed\"",
+        "vt": "jsonata"
+      },
+      {
+        "t": "eq",
+        "v": "$globalContext(\"temperature\") > 60",
+        "vt": "jsonata"
+      },
+      {
+        "t": "eq",
+        "v": "$globalContext(\"current\") > 12 and $globalContext(\"state\") != \"jammed\"",
+        "vt": "jsonata"
+      }
+    ],
+    "checkall": "false",
+    "repair": false,
+    "outputs": 3,
+    "x": 840,
+    "y": 380,
+    "wires": [
+      [
+        "4a2a400dc46ffa67"
+      ],
+      [
+        "77805d88de4fb341"
+      ],
+      [
+        "f2cfd98a1fdd297a"
+      ]
+    ]
+  },
+  {
+    "id": "4a2a400dc46ffa67",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Alm Atasco",
+    "rules": [
+      {
+        "t": "set",
+        "p": "payload",
+        "pt": "msg",
+        "to": "{ \"tipo\": \"ALARMA\", \"motivo\": \"Atasco detectado\", \"severidad\": \"ALTA\", \"timestamp\": $now() }",
+        "tot": "jsonata"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 1060,
+    "y": 360,
+    "wires": [
+      [
+        "2b47f85eb39fd8d4"
+      ]
+    ]
+  },
+  {
+    "id": "77805d88de4fb341",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Alm Temp",
+    "rules": [
+      {
+        "t": "set",
+        "p": "payload",
+        "pt": "msg",
+        "to": "{ \"tipo\": \"ALARMA\", \"motivo\": \"Temperatura elevada (>60°C)\", \"severidad\": \"MEDIA\", \"timestamp\": $now() }",
+        "tot": "jsonata"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 1060,
+    "y": 400,
+    "wires": [
+      [
+        "2b47f85eb39fd8d4"
+      ]
+    ]
+  },
+  {
+    "id": "f2cfd98a1fdd297a",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Alm Corriente",
+    "rules": [
+      {
+        "t": "set",
+        "p": "payload",
+        "pt": "msg",
+        "to": "{ \"tipo\": \"ALARMA\", \"motivo\": \"Sobrecorriente por exceso vel.\", \"severidad\": \"MEDIA\", \"timestamp\": $now() }",
+        "tot": "jsonata"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 1070,
+    "y": 440,
+    "wires": [
+      [
+        "2b47f85eb39fd8d4"
+      ]
+    ]
+  },
+  {
+    "id": "da2cb9c7e27bb69f",
+    "type": "mqtt in",
+    "z": "31e607b434bce90b",
+    "name": "Recibir Comandos",
+    "topic": "utm/iot/A01/commands",
+    "qos": "1",
+    "datatype": "json",
+    "broker": "mqtt_broker_local",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 350,
+    "y": 540,
+    "wires": [
+      [
+        "22ed251430144774"
+      ]
+    ]
+  },
+  {
+    "id": "22ed251430144774",
+    "type": "switch",
+    "z": "31e607b434bce90b",
+    "name": "Enrutar por Comando",
+    "property": "payload.command",
+    "propertyType": "msg",
+    "rules": [
+      {
+        "t": "eq",
+        "v": "start",
+        "vt": "str"
+      },
+      {
+        "t": "eq",
+        "v": "stop",
+        "vt": "str"
+      },
+      {
+        "t": "eq",
+        "v": "set_speed",
+        "vt": "str"
+      },
+      {
+        "t": "eq",
+        "v": "trigger_jam",
+        "vt": "str"
+      },
+      {
+        "t": "eq",
+        "v": "clear_jam",
+        "vt": "str"
+      },
+      {
+        "t": "eq",
+        "v": "sensor_fail",
+        "vt": "str"
+      },
+      {
+        "t": "eq",
+        "v": "sensor_fix",
+        "vt": "str"
+      }
+    ],
+    "checkall": "true",
+    "repair": false,
+    "outputs": 7,
+    "x": 570,
+    "y": 540,
+    "wires": [
+      [
+        "b52a27124c225648"
+      ],
+      [
+        "a76e901fba273f39"
+      ],
+      [
+        "8245db17bb83cc4d"
+      ],
+      [
+        "f57e38b5e19956e2"
+      ],
+      [
+        "de32c330b205b72e"
+      ],
+      [
+        "057b002c166baee9"
+      ],
+      [
+        "bb6837706bbb6dcb"
+      ]
+    ]
+  },
+  {
+    "id": "b52a27124c225648",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Iniciar",
+    "rules": [
+      {
+        "t": "set",
+        "p": "state",
+        "pt": "global",
+        "to": "running",
+        "tot": "str"
+      },
+      {
+        "t": "set",
+        "p": "target_speed",
+        "pt": "global",
+        "to": "0.5",
+        "tot": "num"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 780,
+    "y": 500,
+    "wires": [
+      [
+        "5e70269e14f7bab3"
+      ]
+    ]
+  },
+  {
+    "id": "a76e901fba273f39",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Detener",
+    "rules": [
+      {
+        "t": "set",
+        "p": "state",
+        "pt": "global",
+        "to": "stopped",
+        "tot": "str"
+      },
+      {
+        "t": "set",
+        "p": "target_speed",
+        "pt": "global",
+        "to": "0",
+        "tot": "num"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 790,
+    "y": 540,
+    "wires": [
+      [
+        "5e70269e14f7bab3"
+      ]
+    ]
+  },
+  {
+    "id": "8245db17bb83cc4d",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Velocidad",
+    "rules": [
+      {
+        "t": "set",
+        "p": "target_speed",
+        "pt": "global",
+        "to": "$number(payload.value)",
+        "tot": "jsonata"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 790,
+    "y": 580,
+    "wires": [
+      [
+        "5e70269e14f7bab3"
+      ]
+    ]
+  },
+  {
+    "id": "f57e38b5e19956e2",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Atascar",
+    "rules": [
+      {
+        "t": "set",
+        "p": "state",
+        "pt": "global",
+        "to": "jammed",
+        "tot": "str"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 790,
+    "y": 620,
+    "wires": [
+      [
+        "5e70269e14f7bab3"
+      ]
+    ]
+  },
+  {
+    "id": "de32c330b205b72e",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Desatascar",
+    "rules": [
+      {
+        "t": "set",
+        "p": "state",
+        "pt": "global",
+        "to": "$globalContext(\"target_speed\") > 0 ? \"running\" : \"stopped\"",
+        "tot": "jsonata"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 800,
+    "y": 660,
+    "wires": [
+      [
+        "5e70269e14f7bab3"
+      ]
+    ]
+  },
+  {
+    "id": "057b002c166baee9",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Falla Sensor",
+    "rules": [
+      {
+        "t": "set",
+        "p": "sensor_fail",
+        "pt": "global",
+        "to": "true",
+        "tot": "bool"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 800,
+    "y": 700,
+    "wires": [
+      [
+        "5e70269e14f7bab3"
+      ]
+    ]
+  },
+  {
+    "id": "bb6837706bbb6dcb",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Arreglar Sensor",
+    "rules": [
+      {
+        "t": "set",
+        "p": "sensor_fail",
+        "pt": "global",
+        "to": "false",
+        "tot": "bool"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 810,
+    "y": 740,
+    "wires": [
+      [
+        "5e70269e14f7bab3"
+      ]
+    ]
+  },
+  {
+    "id": "5e70269e14f7bab3",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "Generar ACK",
+    "rules": [
+      {
+        "t": "set",
+        "p": "payload",
+        "pt": "msg",
+        "to": "{ \"status\": \"OK\", \"comando_recibido\": payload.command, \"timestamp\": $now() }",
+        "tot": "jsonata"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 1040,
+    "y": 620,
+    "wires": [
+      [
+        "86a7f48d39446200"
+      ]
+    ]
+  },
+  {
+    "id": "6ec3d8df5d1178c7",
+    "type": "mqtt out",
+    "z": "31e607b434bce90b",
+    "name": "MQTT Telemetry",
+    "topic": "utm/iot/A01/telemetry",
+    "qos": "1",
+    "retain": "false",
+    "broker": "mqtt_broker_local",
+    "x": 1160,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "2a3837f5f556d0b9",
+    "type": "change",
+    "z": "31e607b434bce90b",
+    "name": "A formato CSV",
+    "rules": [
+      {
+        "t": "set",
+        "p": "payload",
+        "pt": "msg",
+        "to": "payload.timestamp & \",\" & payload.velocidad & \",\" & payload.corriente & \",\" & payload.temperatura & \",\" & payload.productos",
+        "tot": "jsonata"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "x": 1090,
+    "y": 240,
+    "wires": [
+      [
+        "abc7931fee28e9d7"
+      ]
+    ]
+  },
+  {
+    "id": "abc7931fee28e9d7",
+    "type": "file",
+    "z": "31e607b434bce90b",
+    "name": "Guardar Historial CSV",
+    "filename": "C:\\MisProyectos\\A01_ArchivoPersistencia",
+    "filenameType": "str",
+    "appendNewline": true,
+    "createDir": true,
+    "overwriteFile": "false",
+    "encoding": "utf8",
+    "x": 1320,
+    "y": 240,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "3d2ba4426ea68f41",
+    "type": "mqtt out",
+    "z": "31e607b434bce90b",
+    "name": "MQTT Status",
+    "topic": "utm/iot/A01/status",
+    "qos": "1",
+    "retain": "true",
+    "broker": "mqtt_broker_local",
+    "x": 1140,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "2b47f85eb39fd8d4",
+    "type": "mqtt out",
+    "z": "31e607b434bce90b",
+    "name": "MQTT Alarms",
+    "topic": "utm/iot/A01/alarms",
+    "qos": "1",
+    "retain": "false",
+    "broker": "mqtt_broker_local",
+    "x": 1300,
+    "y": 400,
+    "wires": []
+  },
+  {
+    "id": "86a7f48d39446200",
+    "type": "mqtt out",
+    "z": "31e607b434bce90b",
+    "name": "MQTT ACK",
+    "topic": "utm/iot/A01/ack",
+    "qos": "1",
+    "retain": "false",
+    "broker": "mqtt_broker_local",
+    "x": 1220,
+    "y": 620,
+    "wires": []
+  },
+  {
+    "id": "4e34492139f8ee24",
+    "type": "http in",
+    "z": "9489d1aa62b36d8f",
+    "name": "GET /dashboard",
+    "url": "/control-a01",
+    "method": "get",
+    "upload": false,
+    "skipBodyParsing": false,
+    "swaggerDoc": "",
+    "x": 160,
+    "y": 120,
+    "wires": [
+      [
+        "861e9c740e6f189c"
+      ]
+    ]
+  },
+  {
+    "id": "861e9c740e6f189c",
+    "type": "template",
+    "z": "9489d1aa62b36d8f",
+    "name": "HTML Dashboard A01",
+    "field": "payload",
+    "fieldType": "msg",
+    "format": "handlebars",
+    "syntax": "mustache",
+    "template": "<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n    <meta charset=\"UTF-8\">\n    <title>A01 - Banda Transportadora</title>\n    <script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>\n    <style>\n        body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; }\n        .nav { margin-bottom: 20px; }\n        .nav button { padding: 10px 20px; cursor: pointer; background: #0056b3; color: white; border: none; border-radius: 4px; margin-right: 10px; }\n        .view { display: none; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }\n        .active { display: block; }\n        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }\n        .card { padding: 15px; border: 1px solid #ddd; border-radius: 8px; text-align: center; }\n        .value { font-size: 24px; font-weight: bold; color: #333; }\n        #conveyor { height: 40px; margin: 20px 0; background: repeating-linear-gradient(45deg, #333, #333 20px, #fbc531 20px, #fbc531 40px); background-size: 80px 40px; border: 2px solid #222; border-radius: 5px; animation: slide linear infinite; animation-play-state: paused; }\n        @keyframes slide { from { background-position: 0 0; } to { background-position: -80px 0; } }\n        .control-panel { background: #eef; padding: 15px; border-radius: 8px; margin-top: 20px; }\n        button.cmd { padding: 8px 15px; margin: 5px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }\n        button.cmd.stop { background: #dc3545; }\n        button.cmd.jam { background: #ffc107; color: black; }\n        table { width: 100%; border-collapse: collapse; margin-top: 15px; }\n        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }\n        th { background-color: #f2f2f2; }\n    </style>\n</head>\n<body>\n    <h1>Dashboard IoT - Banda Transportadora A01</h1>\n    <div class=\"nav\">\n        <button onclick=\"switchView('operacion')\">Vista de Operación</button>\n        <button onclick=\"switchView('ingenieria')\">Vista de Ingeniería</button>\n    </div>\n    <div id=\"operacion\" class=\"view active\">\n        <h2>Estado y Control</h2>\n        <p>Estado actual: <strong id=\"lbl-status\" style=\"color: green;\">CONECTADO (HTTP)</strong></p>\n        <div id=\"conveyor\"></div>\n        <div class=\"grid\">\n            <div class=\"card\"><h3>Velocidad</h3><div class=\"value\" id=\"val-vel\">0.00</div> m/s</div>\n            <div class=\"card\"><h3>Productos</h3><div class=\"value\" id=\"val-prod\">0</div> uds</div>\n            <div class=\"card\"><h3>KPI: Producción</h3><div class=\"value\" id=\"kpi-prodmin\">0.0</div> prod/min</div>\n            <div class=\"card\"><h3>KPI: Eficiencia</h3><div class=\"value\" id=\"kpi-efi\">0.0</div> %</div>\n        </div>\n        <div class=\"control-panel\">\n            <h3>Panel de Control</h3>\n            <button class=\"cmd\" onclick=\"sendCommand('start')\">Arrancar</button>\n            <button class=\"cmd stop\" onclick=\"sendCommand('stop')\">Detener</button>\n            <button class=\"cmd jam\" onclick=\"sendCommand('trigger_jam')\">Simular Atasco</button>\n            <button class=\"cmd\" style=\"background: #6c757d;\" onclick=\"sendCommand('sensor_fail')\">Falla Sensor</button>\n            <button class=\"cmd\" style=\"background: #17a2b8;\" onclick=\"sendCommand('sensor_fix')\">Reparar Sensor</button>\n            <br><br>\n            <label>Consigna (m/s): <input type=\"range\" id=\"in-vel\" min=\"0\" max=\"1\" step=\"0.1\" value=\"0.5\" onchange=\"updateSpeed()\"></label>\n            <span id=\"lbl-vel-cmd\">0.5</span>\n        </div>\n    </div>\n    <div id=\"ingenieria\" class=\"view\">\n        <h2>Análisis y Telemetría</h2>\n        <div class=\"grid\">\n            <div class=\"card\"><h3>Corriente Motor</h3><div class=\"value\" id=\"val-curr\">0.00</div> A</div>\n            <div class=\"card\"><h3>Temperatura</h3><div class=\"value\" id=\"val-temp\">25.0</div> °C</div>\n            <div class=\"card\"><h3>KPI: Tiempo de Ciclo</h3><div class=\"value\" id=\"kpi-ciclo\">0.0</div> s</div>\n            <div class=\"card\"><h3>KPI: Disponibilidad</h3><div class=\"value\" id=\"kpi-disp\">100</div> %</div>\n            <div class=\"card\"><h3>KPI: Tasa de Fallos</h3><div class=\"value\" id=\"kpi-fallos\">0.0</div> %</div>\n        </div>\n        <h3>Histórico en Vivo (20s)</h3>\n        <canvas id=\"chartHistory\" height=\"80\"></canvas>\n        <h3>Registro de Alarmas</h3>\n        <table>\n            <thead><tr><th>Hora</th><th>Severidad</th><th>Motivo</th><th>Acción</th></tr></thead>\n            <tbody id=\"alarm-table\"></tbody>\n        </table>\n    </div>\n    <script>\n        let uptime = 0;\n        let runningTime = 0;\n        let jammedTime = 0;\n        const nominalCapacity = 30; \n        const distProd = 2;\n        \n        const ctx = document.getElementById('chartHistory').getContext('2d');\n        const historyChart = new Chart(ctx, { type: 'line', data: { labels: [], datasets: [ { label: 'Velocidad', borderColor: 'blue', data: [], yAxisID: 'y' }, { label: 'Corriente', borderColor: 'red', data: [], yAxisID: 'y1' } ] }, options: { responsive: true, scales: { y: { type: 'linear', position: 'left', max: 1.5, min: 0 }, y1: { type: 'linear', position: 'right', max: 20, min: 0 } } } });\n        \n        function sendCommand(cmd, val = null) {\n            // Envía el comando mediante una petición HTTP POST al backend de Node-RED sin tocar tu broker MQTT interno\n            fetch('/api/command', {\n                method: 'POST',\n                headers: { 'Content-Type': 'application/json' },\n                body: JSON.stringify({ command: cmd, value: val })\n            }).catch(err => console.log(\"Error enviando comando:\", err));\n        }\n        \n        function updateSpeed() { \n            const val = document.getElementById(\"in-vel\").value; \n            document.getElementById(\"lbl-vel-cmd\").innerText = val; \n            sendCommand(\"set_speed\", val); \n        }\n\n        // Simulación visual local sincronizada para que la interfaz responda al instante\n        setInterval(() => {\n            uptime++;\n            runningTime++;\n            let currentSpeed = parseFloat(document.getElementById(\"in-vel\").value);\n            let prodMin = (currentSpeed / distProd) * 60; \n            \n            document.getElementById(\"val-vel\").innerText = currentSpeed.toFixed(2);\n            document.getElementById(\"val-curr\").innerText = (5 + currentSpeed * 5).toFixed(2);\n            document.getElementById(\"val-temp\").innerText = (25 + currentSpeed * 10).toFixed(1);\n            document.getElementById(\"val-prod\").innerText = Math.floor(uptime * currentSpeed);\n            \n            document.getElementById(\"kpi-disp\").innerText = \"100.0\";\n            document.getElementById(\"kpi-fallos\").innerText = \"0.0\";\n            document.getElementById(\"kpi-prodmin\").innerText = prodMin.toFixed(1); \n            document.getElementById(\"kpi-efi\").innerText = ((prodMin / nominalCapacity) * 100).toFixed(1); \n            document.getElementById(\"kpi-ciclo\").innerText = (currentSpeed > 0 ? (distProd / currentSpeed) : 0).toFixed(1);\n\n            const belt = document.getElementById(\"conveyor\");\n            if (currentSpeed > 0) { \n                belt.style.animationPlayState = \"running\"; \n                belt.style.animationDuration = Math.max(0.5, 2.0 / currentSpeed) + \"s\"; \n            } else {\n                belt.style.animationPlayState = \"paused\";\n            }\n\n            const timeLabel = new Date().toLocaleTimeString();\n            if (historyChart.data.labels.length > 20) { \n                historyChart.data.labels.shift(); \n                historyChart.data.datasets[0].data.shift(); \n                historyChart.data.datasets[1].data.shift(); \n            } \n            historyChart.data.labels.push(timeLabel);\n            historyChart.data.datasets[0].data.push(currentSpeed);\n            historyChart.data.datasets[1].data.push(5 + currentSpeed * 5);\n            historyChart.update();\n        }, 1000);\n        \n        function switchView(viewId) { \n            document.querySelectorAll('.view').forEach(el => el.classList.remove('active')); \n            document.getElementById(viewId).classList.add('active'); \n        }\n    </script>\n</body>\n</html>",
+    "x": 400,
+    "y": 140,
+    "wires": [
+      [
+        "64fc24bcc7f12370"
+      ]
+    ]
+  },
+  {
+    "id": "64fc24bcc7f12370",
+    "type": "http response",
+    "z": "9489d1aa62b36d8f",
+    "name": "HTTP 200",
+    "statusCode": "",
+    "headers": {
+      "Content-Type": "text/html"
+    },
+    "x": 530,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "a01v2_page_in",
+    "type": "http in",
+    "z": "a01v2_tab",
+    "name": "GET /a01-v2 (NUEVO)",
+    "url": "/a01-v2",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 145,
+    "y": 90,
+    "wires": [
+      [
+        "a01v2_page_html"
+      ]
+    ]
+  },
+  {
+    "id": "a01v2_page_html",
+    "type": "template",
+    "z": "a01v2_tab",
+    "name": "HTML completo A01 V2",
+    "field": "payload",
+    "fieldType": "msg",
+    "format": "handlebars",
+    "syntax": "mustache",
+    "template": "<!DOCTYPE html>\n<html lang=\"es\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>A01 - Banda Transportadora</title>\n  <script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>\n  <style>\n    body { font-family: Arial, sans-serif; background-color: #f4f4f9; padding: 20px; margin: 0; }\n    .nav { margin-bottom: 20px; }\n    .nav button { padding: 10px 20px; cursor: pointer; background: #0056b3; color: white; border: none; border-radius: 4px; margin: 0 10px 8px 0; }\n    .view { display: none; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }\n    .active { display: block; }\n    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }\n    .card { padding: 15px; border: 1px solid #ddd; border-radius: 8px; text-align: center; }\n    .value { font-size: 24px; font-weight: bold; color: #333; }\n    #conveyor { height: 40px; margin: 20px 0; background: repeating-linear-gradient(45deg, #333, #333 20px, #fbc531 20px, #fbc531 40px); background-size: 80px 40px; border: 2px solid #222; border-radius: 5px; animation: slide linear infinite; animation-play-state: paused; }\n    @keyframes slide { from { background-position: 0 0; } to { background-position: -80px 0; } }\n    .control-panel { background: #eef; padding: 15px; border-radius: 8px; margin-top: 20px; }\n    button.cmd { padding: 8px 15px; margin: 5px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; }\n    button.cmd.stop { background: #dc3545; }\n    button.cmd.jam { background: #ffc107; color: black; }\n    button.cmd:disabled { opacity: .5; cursor: not-allowed; }\n    table { width: 100%; border-collapse: collapse; margin-top: 15px; }\n    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }\n    th { background-color: #f2f2f2; }\n    #lbl-status { font-weight: bold; color: #a51b1b; }\n    #msg-comando { min-height: 1.3em; margin: 8px 0; font-size: 14px; }\n    .muted { font-size: 12px; color: #666; }\n  </style>\n</head>\n<body>\n  <h1>Dashboard IoT - Banda Transportadora A01</h1>\n  <div class=\"nav\">\n    <button onclick=\"switchView('operacion')\">Vista de Operación</button>\n    <button onclick=\"switchView('ingenieria')\">Vista de Ingeniería</button>\n  </div>\n  <div id=\"operacion\" class=\"view active\">\n    <h2>Estado y Control</h2>\n    <p>Estado actual: <strong id=\"lbl-status\">CONSULTANDO...</strong></p>\n    <div id=\"conveyor\"></div>\n    <div class=\"grid\">\n      <div class=\"card\"><h3>Velocidad</h3><div class=\"value\" id=\"val-vel\">0.00</div> m/s</div>\n      <div class=\"card\"><h3>Productos</h3><div class=\"value\" id=\"val-prod\">0</div> uds</div>\n      <div class=\"card\"><h3>KPI: Producción</h3><div class=\"value\" id=\"kpi-prodmin\">0.0</div> prod/min (est.)</div>\n      <div class=\"card\"><h3>KPI: Eficiencia</h3><div class=\"value\" id=\"kpi-efi\">0.0</div> % (est.)</div>\n    </div>\n    <div class=\"control-panel\">\n      <h3>Panel de Control</h3>\n      <button class=\"cmd\" onclick=\"sendCommand('start', Number(document.getElementById('in-vel').value))\">Arrancar</button>\n      <button class=\"cmd stop\" onclick=\"sendCommand('stop')\">Detener</button>\n      <button class=\"cmd jam\" onclick=\"sendCommand('trigger_jam')\">Simular Atasco</button>\n      <button class=\"cmd\" style=\"background:#7b6100\" onclick=\"sendCommand('clear_jam')\">Desatascar</button>\n      <button class=\"cmd\" style=\"background:#6c757d\" onclick=\"sendCommand('sensor_fail')\">Falla Sensor</button>\n      <button class=\"cmd\" style=\"background:#17a2b8\" onclick=\"sendCommand('sensor_fix')\">Reparar Sensor</button>\n      <br><br>\n      <label>Consigna (m/s):\n        <input type=\"range\" id=\"in-vel\" min=\"0\" max=\"1\" step=\"0.1\" value=\"0.5\" oninput=\"showSpeedCommand()\" onchange=\"updateSpeed()\">\n      </label>\n      <span id=\"lbl-vel-cmd\">0.5</span>\n      <div id=\"msg-comando\" role=\"status\" aria-live=\"polite\"></div>\n    </div>\n  </div>\n  <div id=\"ingenieria\" class=\"view\">\n    <h2>Análisis y Telemetría</h2>\n    <div class=\"grid\">\n      <div class=\"card\"><h3>Corriente Motor</h3><div class=\"value\" id=\"val-curr\">0.00</div> A</div>\n      <div class=\"card\"><h3>Temperatura</h3><div class=\"value\" id=\"val-temp\">25.0</div> °C</div>\n      <div class=\"card\"><h3>KPI: Tiempo de Ciclo</h3><div class=\"value\" id=\"kpi-ciclo\">0.0</div> s (est.)</div>\n      <div class=\"card\"><h3>KPI: Disponibilidad</h3><div class=\"value\" id=\"kpi-disp\">0.0</div> % (sesión)</div>\n      <div class=\"card\"><h3>KPI: Tiempo en fallo</h3><div class=\"value\" id=\"kpi-fallos\">0.0</div> % (sesión)</div>\n    </div>\n    <h3>Histórico en Vivo (últimas 20 lecturas)</h3>\n    <canvas id=\"chartHistory\" height=\"80\"></canvas>\n    <h3>Registro de alarmas observadas</h3>\n    <p class=\"muted\">Eventos registrados mientras esta página permanece abierta; el histórico MQTT/CSV se conserva en tus flujos existentes.</p>\n    <table>\n      <thead><tr><th>Hora</th><th>Severidad</th><th>Motivo</th><th>Acción</th></tr></thead>\n      <tbody id=\"alarm-table\"></tbody>\n    </table>\n  </div>\n  <script>\n    // Este panel NO simula el motor. Lee los valores del contexto global de Node-RED.\n    const STATUS_URL = '/a01-v2/estado';\n    const COMMAND_URL = '/a01-v2/comando';\n    const nominalCapacity = 30; // capacidad nominal de referencia, productos/minuto\n    const distProd = 2; // distancia supuesta entre productos, metros\n    let totalSamples = 0;\n    let runningSamples = 0;\n    let failureSamples = 0;\n    let previousState = null;\n    let previousSensorFailure = null;\n    let lastStatus = null;\n    let inFlight = false;\n\n    const ctx = document.getElementById('chartHistory').getContext('2d');\n    const historyChart = window.Chart ? new Chart(ctx, {\n      type: 'line',\n      data: { labels: [], datasets: [\n        { label: 'Velocidad (m/s)', borderColor: 'blue', data: [], yAxisID: 'y', tension: 0.2 },\n        { label: 'Corriente (A)', borderColor: 'red', data: [], yAxisID: 'y1', tension: 0.2 }\n      ] },\n      options: { responsive: true, animation: false, scales: {\n        y: { type: 'linear', position: 'left', suggestedMax: 1.5, min: 0 },\n        y1: { type: 'linear', position: 'right', suggestedMax: 20, min: 0 }\n      } }\n    }) : null;\n\n    const put = (id, value) => { document.getElementById(id).textContent = value; };\n    function switchView(viewId) {\n      document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));\n      document.getElementById(viewId).classList.add('active');\n      if (historyChart) historyChart.resize();\n    }\n    function showSpeedCommand() {\n      put('lbl-vel-cmd', document.getElementById('in-vel').value);\n    }\n    function addAlarm(severity, reason, action) {\n      const row = document.createElement('tr');\n      [new Date().toLocaleTimeString(), severity, reason, action].forEach(value => {\n        const cell = document.createElement('td');\n        cell.textContent = value;\n        row.appendChild(cell);\n      });\n      document.getElementById('alarm-table').prepend(row);\n      const table = document.getElementById('alarm-table');\n      while (table.children.length > 30) table.lastElementChild.remove();\n    }\n    function renderStatus(data) {\n      lastStatus = data;\n      const state = String(data.state || 'stopped').toLowerCase();\n      const speed = Math.max(0, Number(data.speed) || 0);\n      const current = Number(data.current) || 0;\n      const temperature = Number(data.temperature) || 0;\n      const products = Math.max(0, Math.floor(Number(data.products) || 0));\n      const hasSensorFailure = Boolean(data.sensor_fail);\n      const jammed = state === 'jammed';\n      const running = state === 'running' && !hasSensorFailure;\n      const moving = running && speed > 0;\n\n      let label = 'DETENIDO';\n      let color = '#a51b1b';\n      if (running) { label = 'EN MARCHA'; color = '#078132'; }\n      if (jammed) { label = 'ATASCADO'; color = '#ad6200'; }\n      if (hasSensorFailure) { label = 'FALLA DE SENSOR'; color = '#a51b1b'; }\n      put('lbl-status', label);\n      document.getElementById('lbl-status').style.color = color;\n\n      put('val-vel', speed.toFixed(2));\n      put('val-prod', String(products));\n      put('val-curr', current.toFixed(2));\n      put('val-temp', temperature.toFixed(1));\n\n      // KPI estimados a partir de la velocidad FÍSICA real; nunca del deslizador.\n      const estimatedProdMin = moving ? (speed / distProd) * 60 : 0;\n      put('kpi-prodmin', estimatedProdMin.toFixed(1));\n      put('kpi-efi', Math.min(100, (estimatedProdMin / nominalCapacity) * 100).toFixed(1));\n      put('kpi-ciclo', (moving ? distProd / speed : 0).toFixed(1));\n\n      totalSamples++;\n      if (running) runningSamples++;\n      if (jammed || hasSensorFailure) failureSamples++;\n      put('kpi-disp', ((runningSamples / totalSamples) * 100).toFixed(1));\n      put('kpi-fallos', ((failureSamples / totalSamples) * 100).toFixed(1));\n\n      const belt = document.getElementById('conveyor');\n      belt.style.animationPlayState = moving ? 'running' : 'paused';\n      if (moving) belt.style.animationDuration = Math.max(0.5, 2.0 / speed) + 's';\n\n      if (previousState !== null && state !== previousState) {\n        if (jammed) addAlarm('ALTA', 'Atasco de banda', 'Desatascar y volver a arrancar');\n        else if (previousState === 'jammed') addAlarm('INFO', 'Atasco resuelto', 'Banda detenida');\n      }\n      if (previousSensorFailure !== null && hasSensorFailure !== previousSensorFailure) {\n        if (hasSensorFailure) addAlarm('ALTA', 'Fallo de sensor', 'Reparar sensor');\n        else addAlarm('INFO', 'Sensor reparado', 'Listo para arrancar');\n      }\n      previousState = state;\n      previousSensorFailure = hasSensorFailure;\n\n      if (historyChart) {\n        const chartData = historyChart.data;\n        chartData.labels.push(new Date().toLocaleTimeString());\n        chartData.datasets[0].data.push(speed);\n        chartData.datasets[1].data.push(current);\n        while (chartData.labels.length > 20) {\n          chartData.labels.shift();\n          chartData.datasets.forEach(ds => ds.data.shift());\n        }\n        historyChart.update('none');\n      }\n    }\n\n    async function refreshStatus() {\n      if (inFlight) return;\n      inFlight = true;\n      try {\n        const response = await fetch(STATUS_URL, { cache: 'no-store' });\n        if (!response.ok) throw new Error('HTTP ' + response.status);\n        const data = await response.json();\n        if (!data || data.ok !== true) throw new Error('Respuesta inválida');\n        renderStatus(data);\n      } catch (err) {\n        put('lbl-status', 'SIN CONEXIÓN CON EL MOTOR');\n        document.getElementById('lbl-status').style.color = '#a51b1b';\n        document.getElementById('conveyor').style.animationPlayState = 'paused';\n        console.error('No se pudo obtener estado de A01:', err);\n      } finally {\n        inFlight = false;\n      }\n    }\n\n    async function sendCommand(command, value = null) {\n      put('msg-comando', 'Enviando orden: ' + command + '...');\n      document.querySelectorAll('button.cmd').forEach(btn => btn.disabled = true);\n      try {\n        const response = await fetch(COMMAND_URL, {\n          method: 'POST',\n          headers: { 'Content-Type': 'application/json' },\n          body: JSON.stringify({ command, value })\n        });\n        const data = await response.json();\n        if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));\n        put('msg-comando', 'ORDEN RECIBIDA POR NODE-RED: ' + command + ' · state=' + data.state);\n        await refreshStatus();\n      } catch (err) {\n        put('msg-comando', 'ERROR: ' + err.message);\n        console.error('Comando A01 no enviado:', err);\n      } finally {\n        document.querySelectorAll('button.cmd').forEach(btn => btn.disabled = false);\n      }\n    }\n    function updateSpeed() {\n      const value = Number(document.getElementById('in-vel').value);\n      showSpeedCommand();\n      sendCommand('set_speed', value);\n    }\n\n    // Lecturas reales cada 1 segundo. NO hay uptime++ ni incrementos artificiales.\n    refreshStatus();\n    setInterval(refreshStatus, 1000);\n  </script>\n</body>\n</html>\n",
+    "output": "str",
+    "x": 390,
+    "y": 90,
+    "wires": [
+      [
+        "a01v2_page_headers"
+      ]
+    ]
+  },
+  {
+    "id": "a01v2_page_headers",
+    "type": "function",
+    "z": "a01v2_tab",
+    "name": "No cache HTML",
+    "func": "msg.headers = {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store, max-age=0'}; return msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 605,
+    "y": 90,
+    "wires": [
+      [
+        "a01v2_page_out"
+      ]
+    ]
+  },
+  {
+    "id": "a01v2_page_out",
+    "type": "http response",
+    "z": "a01v2_tab",
+    "name": "Mostrar página V2",
+    "statusCode": "",
+    "headers": {},
+    "x": 820,
+    "y": 90,
+    "wires": []
+  },
+  {
+    "id": "a01v2_cmd_in",
+    "type": "http in",
+    "z": "a01v2_tab",
+    "name": "POST /a01-v2/comando",
+    "url": "/a01-v2/comando",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 162,
+    "y": 220,
+    "wires": [
+      [
+        "a01v2_cmd_fn"
+      ]
+    ]
+  },
+  {
+    "id": "a01v2_cmd_fn",
+    "type": "function",
+    "z": "a01v2_tab",
+    "name": "APLICAR COMANDO GLOBAL",
+    "func": "// El HTML de /a01-v2 envía {command, value}.  Se conserva el motor original.\nconst req = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};\nconst cmd = String(req.command || '').trim();\nconst value = Number(req.value);\nconst validSpeed = req.value !== null && req.value !== undefined && req.value !== '' && Number.isFinite(value) && value >= 0 && value <= 1;\nconst state = String(global.get('state') || 'stopped');\nconst sensorFail = global.get('sensor_fail') === true;\nlet status = 200;\nlet error = '';\nswitch(cmd) {\n    case 'start':\n        if (sensorFail) { status = 409; error = 'Sensor con falla: primero pulsa Reparar Sensor'; break; }\n        if (state === 'jammed') { status = 409; error = 'Atasco activo: primero pulsa Desatascar'; break; }\n        if (req.value !== null && req.value !== undefined && !validSpeed) { status = 400; error = 'Consigna fuera de 0..1'; break; }\n        global.set('target_speed', validSpeed ? value : 0.5);\n        global.set('state', 'running');\n        break;\n    case 'stop':\n        global.set('state', 'stopped');\n        global.set('target_speed', 0);\n        global.set('speed', 0);\n        break;\n    case 'set_speed':\n        if (!validSpeed) { status = 400; error = 'Consigna fuera de 0..1'; break; }\n        global.set('target_speed', value);\n        break;\n    case 'trigger_jam':\n        global.set('state', 'jammed');\n        global.set('speed', 0);\n        break;\n    case 'clear_jam':\n        if (state === 'jammed') {\n            global.set('state', 'stopped');\n            global.set('target_speed', 0);\n            global.set('speed', 0);\n        }\n        break;\n    case 'sensor_fail':\n        global.set('sensor_fail', true);\n        global.set('state', 'stopped');\n        global.set('target_speed', 0);\n        global.set('speed', 0);\n        break;\n    case 'sensor_fix':\n        global.set('sensor_fail', false);\n        break;\n    default:\n        status = 400;\n        error = 'Comando desconocido: ' + cmd;\n}\nconst result = {ok: status === 200, version: 'a01-v2', command: cmd,\n    state: String(global.get('state') || 'stopped'), target_speed: Number(global.get('target_speed')) || 0};\nif (error) result.error = error;\nmsg.statusCode = status;\nmsg.headers = {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'};\nmsg.payload = result;\nnode.warn('A01 V2 POST ' + cmd + ' -> ' + result.state + ' (HTTP ' + status + ')');\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 427,
+    "y": 220,
+    "wires": [
+      [
+        "a01v2_cmd_out"
+      ]
+    ]
+  },
+  {
+    "id": "a01v2_cmd_out",
+    "type": "http response",
+    "z": "a01v2_tab",
+    "name": "Respuesta comando",
+    "statusCode": "",
+    "headers": {},
+    "x": 734,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "a01v2_status_in",
+    "type": "http in",
+    "z": "a01v2_tab",
+    "name": "GET /a01-v2/estado",
+    "url": "/a01-v2/estado",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 158,
+    "y": 335,
+    "wires": [
+      [
+        "a01v2_status_fn"
+      ]
+    ]
+  },
+  {
+    "id": "a01v2_status_fn",
+    "type": "function",
+    "z": "a01v2_tab",
+    "name": "LEER CONTEXTO GLOBAL",
+    "func": "// Lee datos reales del motor original en Contexto Global.\nconst n = (key, fallback) => { const value = global.get(key); const num = Number(value); return value !== null && value !== undefined && Number.isFinite(num) ? num : fallback; };\nmsg.statusCode = 200;\nmsg.headers = {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'};\nmsg.payload = {ok: true, version: 'a01-v2', state: String(global.get('state') || 'stopped'),\n    speed: n('speed', 0), target_speed: n('target_speed',0),\n    current: n('current',0), temperature: n('temperature',25),\n    products: n('products',0), sensor_fail: global.get('sensor_fail') === true,\n    fecha: new Date().toISOString()};\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 410,
+    "y": 335,
+    "wires": [
+      [
+        "a01v2_status_out"
+      ]
+    ]
+  },
+  {
+    "id": "a01v2_status_out",
+    "type": "http response",
+    "z": "a01v2_tab",
+    "name": "Respuesta estado",
+    "statusCode": "",
+    "headers": {},
+    "x": 729,
+    "y": 335,
+    "wires": []
+  }
+]
