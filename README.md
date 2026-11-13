@@ -2,6 +2,7 @@
 
 Proyecto académico que simula una banda transportadora industrial con Node-RED, variables de proceso, detección de alarmas, mensajería MQTT y dashboard web.
 
+Proyecto hecho en NodeRed
 ## Flujos que contiene
 
 1. **A01 - Motor Físico y MQTT**: inicializa el estado global y ejecuta ecuaciones JSONata cada segundo. Publica telemetría, estado y alarmas por MQTT; recibe comandos MQTT y confirma con ACK.
